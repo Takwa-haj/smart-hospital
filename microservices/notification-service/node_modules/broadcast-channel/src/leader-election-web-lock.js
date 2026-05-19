@@ -1,0 +1,113 @@
+import {
+    randomToken
+} from './util.js';
+import {
+    sendLeaderMessage,
+    beLeader
+} from './leader-election-util.js';
+
+/**
+ * A faster version of the leader elector that uses the WebLock API
+ * @link https://developer.mozilla.org/en-US/docs/Web/API/Web_Locks_API
+ */
+export const LeaderElectionWebLock = function (broadcastChannel, options) {
+    this.broadcastChannel = broadcastChannel;
+    broadcastChannel._befC.push(() => this.die());
+    this._options = options;
+
+    this.isLeader = false;
+    this.isDead = false;
+    this.token = randomToken();
+    this._lstns = [];
+    this._unl = [];
+    this._dpL = () => { }; // onduplicate listener
+    this._dpLC = false; // true when onduplicate called
+
+    this._wKMC = {}; // stuff for cleanup
+
+    // lock name
+    this.lN = 'pubkey-bc||' + broadcastChannel.method.type + '||' + broadcastChannel.name;
+
+};
+
+
+const LEADER_DIE_ABORT_SIGNAL_MESSAGE = 'LeaderElectionWebLock.die() called';
+
+LeaderElectionWebLock.prototype = {
+    hasLeader() {
+        return navigator.locks.query().then(locks => {
+            const relevantLocks = locks.held ? locks.held.filter(lock => lock.name === this.lN) : [];
+            if (relevantLocks && relevantLocks.length > 0) {
+                return true;
+            } else {
+                return false;
+            }
+        });
+    },
+    awaitLeadership() {
+        if (!this._wLMP) {
+            this._wKMC.c = new AbortController();
+            const returnPromise = new Promise((res, rej) => {
+                this._wKMC.res = res;
+                this._wKMC.rej = rej;
+            });
+            this._wLMP = new Promise((res, reject) => {
+                navigator.locks.request(
+                    this.lN,
+                    {
+                        signal: this._wKMC.c.signal
+                    },
+                    () => {
+                        // if the lock resolved, we can drop the abort controller
+                        this._wKMC.c = undefined;
+
+                        beLeader(this);
+                        res();
+                        return returnPromise;
+                    }
+                ).catch((err) => {
+                    if (err.message && err.message === LEADER_DIE_ABORT_SIGNAL_MESSAGE) {
+                        /**
+                         * In this case we do nothing!
+                         * The leader died and awaitLeadership()
+                         * will never resolve. Also since this is not an error,
+                         * it will not throw.
+                         */
+                    } else {
+                        if (this._wKMC.rej) {
+                            this._wKMC.rej(err);
+                        }
+                        reject(err);
+                    }
+                });
+            });
+        }
+        return this._wLMP;
+    },
+
+    set onduplicate(_fn) {
+        // Do nothing because there are no duplicates in the WebLock version
+    },
+    die() {
+        this._lstns.forEach(listener => this.broadcastChannel.removeEventListener('internal', listener));
+        this._lstns = [];
+        this._unl.forEach(uFn => uFn.remove());
+        this._unl = [];
+        if (this.isLeader) {
+            this.isLeader = false;
+        }
+        this.isDead = true;
+        if (this._wKMC.res) {
+            this._wKMC.res();
+        }
+
+        /**
+         * We have to fire an abort signal
+         * so that the navigator.locks.request stops.
+         */
+        if (this._wKMC.c) {
+            this._wKMC.c.abort(new Error(LEADER_DIE_ABORT_SIGNAL_MESSAGE));
+        }
+        return sendLeaderMessage(this, 'death');
+    }
+};

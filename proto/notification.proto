@@ -1,0 +1,35 @@
+syntax = "proto3";
+
+package hospital;
+
+service NotificationService {
+  rpc SendNotification  (SendNotificationRequest)  returns (NotificationResponse);
+  rpc ListNotifications (ListNotificationsRequest) returns (NotificationListResponse);
+}
+
+message Notification {
+  string id        = 1;
+  string patientId = 2;
+  string type      = 3;
+  string message   = 4;
+  string status    = 5;
+  string createdAt = 6;
+}
+
+message SendNotificationRequest {
+  string patientId = 1;
+  string type      = 2;
+  string message   = 3;
+}
+
+message ListNotificationsRequest {
+  string patientId = 1;
+}
+
+message NotificationResponse {
+  Notification notification = 1;
+}
+
+message NotificationListResponse {
+  repeated Notification notifications = 1;
+}

@@ -1,0 +1,13 @@
+{
+  "name": "smart-hospital",
+  "version": "1.0.0",
+  "description": "Smart Hospital Management System — Architecture Microservices",
+  "scripts": {
+    "patient":      "node microservices/patient-service/server.js",
+    "appointment":  "node microservices/appointment-service/server.js",
+    "notification": "node microservices/notification-service/server.js",
+    "gateway":      "node api-gateway/server.js"
+  },
+  "author": "Salah Gontara — SoA et Microservices — 4Info — 2025/2026",
+  "license": "ISC"
+}
